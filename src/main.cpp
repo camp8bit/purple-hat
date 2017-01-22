@@ -60,12 +60,15 @@ void loop() {
     byte color = 0;
 
     unsigned long now = millis();
+    // Read from the IMU once every 100ms
     if (now - lastCheck > 100) {
         lastCheck = now;
         accChange = getAccelerometerChange();
         color = (byte) (getMagnetometerHeading() / 360 * 255);
     }
 
+    // Only trigger new led 'explosions' if the hat has a total acceleration more than 0.25G and
+    // the change is rising
     if (accChange > 0.25 && accChange > last_change) {
         last_change = accChange;
         for (byte i = 0; i < 20; i++) {
@@ -91,6 +94,8 @@ void loop() {
     FastLED.show();
 }
 
+// get the total g force change (always positive) that is the sum of all axises.
+// this is not strictly a real scientific value, but good enough for the use case.
 float getAccelerometerChange() {
     static float filtered[3] = {0, 0, 0};
     static float prevFiltered[3] = {0, 0, 0};
@@ -101,20 +106,28 @@ float getAccelerometerChange() {
     float change[3] = {0, 0, 0};
     float total_change = 0;
 
+    // for each axis of the accelerometer (x,y,z)
     for (byte i = 0; i < 3; i++) {
         // convert to g force with the resolution of +/- 4G, see the GY_85::SetAccelerometer()
         // +/- 4G = Measurement Value * (2*4/(1024)) = 0.0078125
         reading[i] = *(i + a) * 0.0078125;
+
         // low-pass filter (0.5 is the alpha value)
         const float alpha = 0.5;
         filtered[i] = reading[i] * alpha + filtered[i] * (1.0 - alpha);
+
+        // store the change since the last reading
         change[i] = prevFiltered[i] - filtered[i];
         prevFiltered[i] = filtered[i];
+
+        // sum up the G force changes
         total_change += abs(change[i]);
     }
     return total_change;
 }
 
+// Get the compass direction (in deegres) from the the magnetometer. This function does
+// not compensate if the sensor is not totally level with the ground.
 float getMagnetometerHeading() {
     int *a = GY85.readFromCompass();
     for (byte i = 0; i < 3; i++) {
@@ -128,7 +141,7 @@ float getMagnetometerHeading() {
     // Once you have your heading, you must then add your 'Declination Angle',
     // which is the 'Error' of the magnetic field in your location.
     // Find yours here: http://www.magnetic-declination.com/
-    heading += 0.0404;
+    // heading += 0.0404;
 
     // Correct for when signs are reversed.
     if (heading < 0) {
@@ -142,5 +155,3 @@ float getMagnetometerHeading() {
 
     return heading * 180 / M_PI;
 }
-
-
