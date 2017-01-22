@@ -3,23 +3,29 @@
 
 #include "GY_85.h"
 
-#define DATA_PIN     6
-#define COLOR_ORDER GRB
-#define CHIPSET     WS2812B
-#define NUM_LEDS 34
+#define LED_DATA_PIN     6
+#define LED_COLOR_ORDER GRB
+#define LED_CHIPSET     WS2812B
+#define LED_COUNT 34
 
-CRGB leds[NUM_LEDS];
-
-GY_85 GY85;
+CRGB leds[LED_COUNT];
 
 CRGBPalette16 palette(*PartyColors_p);
+
+// this class is inspired / borrowed from https://github.com/sqrtmo/GY-85-arduino
+// Wiring between the arduino and the the GY85 module is:
+//    VCC_IN  ->   5V
+//    GND     ->   GND
+//    SCL     ->   A5 (clock line) - see https://www.arduino.cc/en/Reference/Wire
+//    SDA     ->   A4 (data line)  - see https://www.arduino.cc/en/Reference/Wire
+GY_85 GY85;
 
 struct Pixel {
     byte value;
     byte color;
 };
 
-Pixel pixels[NUM_LEDS];
+Pixel pixels[LED_COUNT];
 
 float getAccelerometerChange();
 
@@ -29,18 +35,18 @@ void setup() {
     // sanity check delay - allows reprogramming if accidentally blowing power w/leds
     delay(2000);
 
-    FastLED.addLeds<CHIPSET, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+    FastLED.addLeds<LED_CHIPSET, LED_DATA_PIN, LED_COLOR_ORDER>(leds, LED_COUNT).setCorrection(TypicalLEDStrip);
     FastLED.setMaxPowerInVoltsAndMilliamps(5, 200);
 
     // 3 blink boot indicator
     for (byte i = 0; i < 4; ++i) {
-        fill_solid(leds, NUM_LEDS, CRGB::DeepPink);
+        fill_solid(leds, LED_COUNT, CRGB::DeepPink);
         FastLED.delay(20);
-        fill_solid(leds, NUM_LEDS, CRGB::Black);
+        fill_solid(leds, LED_COUNT, CRGB::Black);
         FastLED.delay(50);
     }
 
-    for (byte i = 0; i < NUM_LEDS; i++) {
+    for (byte i = 0; i < LED_COUNT; i++) {
         pixels[i].value = 0;
         pixels[i].color = 0;
     }
@@ -52,6 +58,7 @@ void setup() {
     randomSeed((unsigned long) analogRead(0));
 }
 
+// @todo: add sleep mode with wake up from the GY85 interrupt(s)
 void loop() {
     static unsigned long lastCheck = millis();
     static float last_change = 0;
@@ -60,19 +67,23 @@ void loop() {
     byte color = 0;
 
     unsigned long now = millis();
+
     // Read from the IMU once every 100ms
     if (now - lastCheck > 100) {
         lastCheck = now;
+        // get the acceleration change in G (positive)
         accChange = getAccelerometerChange();
+        // get the 360 direction relative from magnetic north and scale that to a
+        // value that can be used with a CRGBPalette16
         color = (byte) (getMagnetometerHeading() / 360 * 255);
     }
 
-    // Only trigger new led 'explosions' if the hat has a total acceleration more than 0.25G and
+    // Only trigger new LED'explosions' if the hat has a total acceleration more than 0.25G and
     // the change is rising
     if (accChange > 0.25 && accChange > last_change) {
         last_change = accChange;
         for (byte i = 0; i < 20; i++) {
-            byte pixel = (byte) random(NUM_LEDS);
+            byte pixel = (byte) random(LED_COUNT);
             pixels[pixel].value = 255;
             pixels[pixel].color = (byte) (random(16) + color);
         }
@@ -82,7 +93,7 @@ void loop() {
         last_change = 0;
     }
 
-    for (byte i = 0; i < NUM_LEDS; i++) {
+    for (byte i = 0; i < LED_COUNT; i++) {
         if (pixels[i].value < 3) {
             leds[i] = CRGB::Black;
             pixels[i].value = 0;
